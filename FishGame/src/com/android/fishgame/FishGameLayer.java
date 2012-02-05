@@ -5,10 +5,14 @@ import java.util.Random;
 
 import org.cocos2d.actions.instant.CCCallFuncN;
 import org.cocos2d.actions.interval.CCMoveTo;
+import org.cocos2d.actions.interval.CCRotateTo;
 import org.cocos2d.actions.interval.CCSequence;
+import org.cocos2d.events.CCTouchDispatcher;
 import org.cocos2d.layers.CCColorLayer;
 import org.cocos2d.layers.CCScene;
 import org.cocos2d.nodes.CCDirector;
+import org.cocos2d.nodes.CCLabel;
+import org.cocos2d.nodes.CCNode;
 import org.cocos2d.nodes.CCSprite;
 import org.cocos2d.types.CGPoint;
 import org.cocos2d.types.CGSize;
@@ -36,13 +40,22 @@ public class FishGameLayer extends CCColorLayer {
 	//Objects
 	protected ArrayList<Enemy> _enemies;
 	protected ArrayList<Friendly> _friendlies;
+	protected ArrayList<Resource> _resources;
+	protected ArrayList<Resource> _resourcesToDelete;
 	
 	Lane [] lanes;
 	
 	protected static int numLanes = 5;
 	protected static int numColumns = 9; 
 	
-	protected int shrimpMeter = 0; 
+	protected int shrimpMeter = 0;
+	
+	public CCLabel resourceCounter;
+	
+	public enum ResourceType {
+		CASH,
+		ENERGY
+	}
 	
 	class Lane {
 		int enemyCount;
@@ -50,6 +63,11 @@ public class FishGameLayer extends CCColorLayer {
 	
 	abstract class Actor {
 		Integer health;
+		CCSprite sprite;
+	}
+	
+	abstract class Resource {
+		ResourceType type;
 		CCSprite sprite;
 	}
 	
@@ -62,10 +80,10 @@ public class FishGameLayer extends CCColorLayer {
 		}
 	}
 	
-	class Shrimp {
-		CCSprite sprite;
+	class Shrimp extends Resource{
 		
 		public Shrimp(){
+			type = ResourceType.CASH;
 			sprite = CCSprite.sprite(shrimpImage);
 		}
 		
@@ -99,6 +117,8 @@ public class FishGameLayer extends CCColorLayer {
 		
 		_enemies = new ArrayList<Enemy>();
 		_friendlies = new ArrayList<Friendly>();
+		_resources = new ArrayList<Resource>();
+		_resourcesToDelete = new ArrayList<Resource>();
 		
 		lanes = new Lane[numLanes];
 		
@@ -108,6 +128,9 @@ public class FishGameLayer extends CCColorLayer {
 			lanes[i].enemyCount = 0;
 			
 		}
+		
+		resourceCounter = CCLabel.makeLabel(Integer.toString(shrimpMeter), "arial", 12f);
+		this.addChild(resourceCounter);
 		
 		//CGSize winSize = CCDirector.sharedDirector().displaySize();
 	    //screenWidth = winSize.width;
@@ -141,6 +164,7 @@ public class FishGameLayer extends CCColorLayer {
 			Shrimp shrimp = new Shrimp();
 			shrimp.sprite.setPosition(CGPoint.make(x, y));
 			addChild(shrimp.sprite);
+			_resources.add(shrimp);
 		}
 	}
 	
@@ -177,35 +201,6 @@ public class FishGameLayer extends CCColorLayer {
 		enemy.sprite.runAction(actions);
 		
 	}
-	
-	/* Sprite Version
-	protected void addTarget() {
-		Random rand = new Random();
-		
-		CCSprite target = CCSprite.sprite("Target.png");
-		
-		CGSize winSize = CCDirector.sharedDirector().displaySize();
-		int rangeY = 5;
-		float actualY = winSize.height* (rand.nextInt(rangeY) * .18f + .09f);
-		
-		target.setPosition(winSize.width + (target.getContentSize().width/2.0f), actualY);
-		addChild(target);
-		target.setTag(1);
-		_targets.add(target);
-		
-		
-		int minDuration = 7;
-		int maxDuration = 10;
-		int rangeDuration = maxDuration - minDuration;
-		int actualDuration = rand.nextInt(rangeDuration) + minDuration;
-		
-		CCMoveTo actionMove = CCMoveTo.action(actualDuration, CGPoint.ccp(-target.getContentSize().width/2.0f, actualY));
-		CCCallFuncN actionMoveDone = CCCallFuncN.action(this, "spriteMoveFinished");
-		CCSequence actions = CCSequence.actions(actionMove, actionMoveDone);
-		
-		target.runAction(actions);
-		
-	}*/
 
 	
 	@Override
@@ -218,7 +213,6 @@ public class FishGameLayer extends CCColorLayer {
 	    // Set up initial location of projectile
 	    CGSize winSize = CCDirector.sharedDirector().displaySize();
 	    
-	    
 	    //ignore left 10%
 	    if (location.x < winSize.width/10.0f)
 	    	return true;
@@ -226,8 +220,17 @@ public class FishGameLayer extends CCColorLayer {
 	    if (location.y > winSize.height * (9.0f/10.0f))
 	    	return true;
 	    
+	    for( Resource resource : _resources ) {
+	    	if (resource.sprite.getBoundingBox().contains(location.x, location.y)) {
+	    		_resourcesToDelete.add(resource);
+	    		return true;
+	    	}
+	    }
+	    
+
+	    
 	    //CCSprite friendly = CCSprite.sprite(friendlyImage);
-	 	  Friendly friendly = new Friendly();
+	    Friendly friendly = new Friendly();
 	 	  
 	    float realX = location.x;
 	    float realY = location.y;
@@ -271,41 +274,15 @@ public class FishGameLayer extends CCColorLayer {
 	    	
 	    friendly.sprite.setPosition(CGPoint.make(realX, realY));
 	 
-	    // Determine offset of location to projectile
-	    //int offX = (int)(location.x - projectile.getPosition().x);
-	    //int offY = (int)(location.y - projectile.getPosition().y);
-	 
-	    // Bail out if we are shooting down or backwards
-	    //if (offX <= 0)
-	      //  return true;
-	 
 	    // Ok to add now - we've double checked position
 	    addChild(friendly.sprite);
 	    friendly.sprite.setTag(3);
 		_friendlysprites.add(friendly.sprite);
 		_friendlies.add(friendly);
-	    // Determine where we wish to shoot the projectile to
-	    /*
-	    int realX = (int)(winSize.width + (projectile.getContentSize().width / 2.0f));
-	    float ratio = (float)offY / (float)offX;
-	    int realY = (int)((realX * ratio) + projectile.getPosition().y);
-	    CGPoint realDest = CGPoint.ccp(realX, realY);
-	 */
-	    // Determine the length of how far we're shooting
-	   /*
-	    int offRealX = (int)(realX - projectile.getPosition().x);
-	    int offRealY = (int)(realY - projectile.getPosition().y);
-	    float length = (float)Math.sqrt((offRealX * offRealX) + (offRealY * offRealY));
-	    float velocity = 480.0f / 1.0f; // 480 pixels / 1 sec
-	    float realMoveDuration = length / velocity;
-	 */
-	    // Move projectile to actual endpoint
-	   /* projectile.runAction(CCSequence.actions(
-	            CCMoveTo.action(realMoveDuration, realDest),
-	            CCCallFuncN.action(this, "spriteMoveFinished")));
-	 */
+	
 	    return true;
 	}
+
 	
 	public void updateBehavior (float dt) {
 		
@@ -336,6 +313,23 @@ public class FishGameLayer extends CCColorLayer {
 	
 	public void update(float dt) {
 		ArrayList<CCSprite> projectilesToDelete = new ArrayList<CCSprite>();
+		
+		resourceCounter.setString(Integer.toString(shrimpMeter));
+		
+	    for( Resource resource : _resourcesToDelete ) {
+    		_resources.remove(resource);
+    		removeChild(resource.sprite, true);
+    		switch(resource.type) {
+    		case CASH:
+    			shrimpMeter++;
+    			break;
+    		case ENERGY:
+    			//TODO
+    			break;
+    		}
+	    }
+	    
+	    _resourcesToDelete.clear();
 		
 		for (CCSprite projectile : _projectiles) {
 			
